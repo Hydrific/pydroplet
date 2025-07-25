@@ -5,6 +5,7 @@ import json
 import logging
 import socket
 import ssl
+import datetime
 
 import aiohttp
 
@@ -84,6 +85,28 @@ class DropletDiscovery:
 
 
 @dataclass
+class VolumeAccumulator:
+    name: str
+    next_reset: datetime.datetime
+
+    _volume: float = 0
+
+    def add_volume(self, volume) -> None:
+        self._volume += volume
+
+    def get_volume(self) -> float:
+        return self._volume
+
+    def reset(self) -> None:
+        self._volume = 0
+
+    def set_next_reset(self, reset_time: datetime.datetime) -> None:
+        self.next_reset = reset_time
+
+    def reset_expired(self, local_time: datetime.datetime) -> bool:
+        return local_time > self.next_reset
+
+
 class Droplet:
     """Droplet device."""
 
@@ -94,12 +117,28 @@ class Droplet:
     logger: logging.Logger | None = None
 
     _flow_rate: float = 0
+    _volume_delta: float = 0
     _signal_quality: str = "Unknown"
     _server_status: str = "Unknown"
     _available: bool = False
+    _accumulators: list[VolumeAccumulator] = []
 
     _client: aiohttp.ClientWebSocketResponse | None = None
     _connected: bool = False
+
+    def __init__(
+        self,
+        host: str,
+        session: aiohttp.client.ClientSession,
+        token: str,
+        port: int,
+        logger: logging.Logger | None = None,
+    ) -> None:
+        self.host = host
+        self.session = session
+        self.token = token
+        self.port = port
+        self.logger = logger
 
     @property
     def connected(self) -> bool:
@@ -159,17 +198,48 @@ class Droplet:
                     self._log(logging.ERROR, "Connection closed!")
                     await self.disconnect()
                     return
+                case aiohttp.WSMsgType.CLOSING:
+                    pass
                 case _:
                     self._log(
                         logging.ERROR,
                         f"Msg type: {aiohttp.WSMsgType(message.type).name}",
                     )
 
+    def add_accumulator(self, name: str, reset_time: datetime.datetime) -> None:
+        self._accumulators.append(VolumeAccumulator(name, reset_time))
+
+    def _update_accumulators(self, volume: float) -> None:
+        for a in self._accumulators:
+            a.add_volume(volume)
+
+    def accumulator_expired(self, local_time: datetime.datetime, name: str) -> bool:
+        for a in self._accumulators:
+            if a.name == name:
+                return a.reset_expired(local_time)
+        return False
+
+    def reset_accumulator(self, name: str, next_reset: datetime.datetime) -> None:
+        for a in self._accumulators:
+            if a.name == name:
+                a.reset()
+                a.set_next_reset(next_reset)
+
+    def get_accumulated_volume(self, name: str) -> float:
+        for a in self._accumulators:
+            if a.name == name:
+                return a.get_volume()
+        return -1
+
     def _parse_message(self, msg: dict) -> bool:
         """Parse state message and return true if anything changed."""
         changed = False
         if flow_rate := msg.get("flow"):
             self._flow_rate = flow_rate
+            changed = True
+        if volume := msg.get("volume"):
+            self._volume_delta += volume
+            self._update_accumulators(volume)
             changed = True
         if network := msg.get("server"):
             self._server_status = network
@@ -188,6 +258,11 @@ class Droplet:
     def get_flow_rate(self):
         """Get Droplet's flow rate."""
         return self._flow_rate
+
+    def get_volume_delta(self):
+        res = self._volume_delta
+        self._volume_delta -= res
+        return res
 
     def get_signal_quality(self):
         """Get Droplet's signal quality."""
