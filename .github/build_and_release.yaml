@@ -1,4 +1,7 @@
 name: Build and Publish Droplet Package
+
+on: push
+
 jobs:
   build:
     name: Build distribution 📦
