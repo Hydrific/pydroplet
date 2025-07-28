@@ -3,8 +3,36 @@ name: Build and Publish Droplet Package
 on: push
 
 jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+    - name: Install test dependencies
+      run: >-
+        python3 -m
+        pip install
+        -r tests/requirements.txt
+    - name: Install latest version of pydroplet
+      run: >-
+        python3 -m
+        pip install .
+    - name: Run tests
+      run: >-
+        pytest tests/*.py
+
   build:
     name: Build distribution 📦
+    if: startsWith(github.ref, 'refs/heads/main')  # only build on pushes to main
+    needs:
+    - test
     runs-on: ubuntu-latest
 
     steps:
@@ -28,6 +56,7 @@ jobs:
       with:
         name: python-package-distributions
         path: dist/
+
   publish-to-pypi:
     name: >-
       Publish Python 🐍 distribution 📦 to PyPI

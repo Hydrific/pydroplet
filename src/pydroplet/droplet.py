@@ -53,7 +53,7 @@ class DropletDiscovery:
 
     def is_valid(self) -> bool:
         """Check discovery validity."""
-        if self.device_id is None or self.port is None or self.port < 1:
+        if not self.device_id or self.port is None or self.port < 1:
             return False
         return True
 
@@ -86,24 +86,31 @@ class DropletDiscovery:
 
 @dataclass
 class VolumeAccumulator:
+    """Track volume accumulation over a period."""
+
     name: str
     next_reset: datetime.datetime
 
     _volume: float = 0
 
     def add_volume(self, volume) -> None:
+        """Add volume to the accumulator."""
         self._volume += volume
 
     def get_volume(self) -> float:
+        """Retrieve the accumulated volume."""
         return self._volume
 
     def reset(self) -> None:
+        """Reset volume to 0."""
         self._volume = 0
 
     def set_next_reset(self, reset_time: datetime.datetime) -> None:
+        """Set the next time at which the accumulator will expire."""
         self.next_reset = reset_time
 
     def reset_expired(self, local_time: datetime.datetime) -> bool:
+        """Check if reset time has expired. Returns true if expired, false otherwise."""
         return local_time > self.next_reset
 
 
@@ -206,26 +213,46 @@ class Droplet:
                         f"Msg type: {aiohttp.WSMsgType(message.type).name}",
                     )
 
-    def add_accumulator(self, name: str, reset_time: datetime.datetime) -> None:
+    def add_accumulator(self, name: str, reset_time: datetime.datetime) -> bool:
+        """Add a volume accumulator. Returns true on success, false if there is already an accumulator of the same name."""
+        for a in self._accumulators:
+            if a.name == name:
+                self._log(
+                    logging.WARNING, "Accumulator with name %s already exists", name
+                )
+                return False
         self._accumulators.append(VolumeAccumulator(name, reset_time))
+        return True
+
+    def remove_accumulator(self, name: str) -> bool:
+        """Remove accumulator. Returns true if accumulator found, false otherwise."""
+        for a in self._accumulators:
+            if a.name == name:
+                self._accumulators.remove(a)
+                return True
+        return False
 
     def _update_accumulators(self, volume: float) -> None:
+        """Update accumulators with a new volume delta."""
         for a in self._accumulators:
             a.add_volume(volume)
 
     def accumulator_expired(self, local_time: datetime.datetime, name: str) -> bool:
+        """Check if accumulator is expired. True if expired, false if not or accumulator not found."""
         for a in self._accumulators:
             if a.name == name:
                 return a.reset_expired(local_time)
         return False
 
     def reset_accumulator(self, name: str, next_reset: datetime.datetime) -> None:
+        """Reset accumulator to new expiration date and zero volume."""
         for a in self._accumulators:
             if a.name == name:
                 a.reset()
                 a.set_next_reset(next_reset)
 
     def get_accumulated_volume(self, name: str) -> float:
+        """Get volume for an accumulator."""
         for a in self._accumulators:
             if a.name == name:
                 return a.get_volume()
@@ -234,17 +261,17 @@ class Droplet:
     def _parse_message(self, msg: dict) -> bool:
         """Parse state message and return true if anything changed."""
         changed = False
-        if flow_rate := msg.get("flow"):
+        if (flow_rate := msg.get("flow")) is not None:
             self._flow_rate = flow_rate
             changed = True
-        if volume := msg.get("volume"):
+        if (volume := msg.get("volume")) is not None:
             self._volume_delta += volume
             self._update_accumulators(volume)
             changed = True
-        if network := msg.get("server"):
+        if (network := msg.get("server")) and self._server_status != network:
             self._server_status = network
             changed = True
-        if signal := msg.get("signal"):
+        if (signal := msg.get("signal")) and self._signal_quality != signal:
             self._signal_quality = signal
             changed = True
         return changed
