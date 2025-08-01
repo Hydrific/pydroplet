@@ -6,6 +6,8 @@ import logging
 import socket
 import ssl
 import datetime
+from collections.abc import Callable
+from typing import Any
 
 import aiohttp
 
@@ -36,10 +38,10 @@ class DropletDiscovery:
     device_id: str | None
     host: str
     port: int | None
-    properties: dict
+    properties: dict[str, Any]
 
     def __init__(
-        self, host: str, port: int | None, service_name: str, properties: dict
+        self, host: str, port: int | None, service_name: str, properties: dict[str, Any]
     ) -> None:
         """Initialize Droplet discovery."""
         self.host = host
@@ -93,7 +95,7 @@ class VolumeAccumulator:
 
     _volume: float = 0
 
-    def add_volume(self, volume) -> None:
+    def add_volume(self, volume: float) -> None:
         """Add volume to the accumulator."""
         self._volume += volume
 
@@ -185,7 +187,7 @@ class Droplet:
             await self._client.close()
             self._connected = False
 
-    async def listen(self, callback) -> None:
+    async def listen(self, callback: Callable[[Any], None]) -> None:
         """Listen for messages over the websocket."""
         while self._client and not self._client.closed:
             message = await self._client.receive()
@@ -258,7 +260,7 @@ class Droplet:
                 return a.get_volume()
         return -1
 
-    def _parse_message(self, msg: dict) -> bool:
+    def _parse_message(self, msg: dict[str, Any]) -> bool:
         """Parse state message and return true if anything changed."""
         changed = False
         if (flow_rate := msg.get("flow")) is not None:
@@ -276,29 +278,29 @@ class Droplet:
             changed = True
         return changed
 
-    def _log(self, level, msg, *args) -> None:
+    def _log(self, level: int, msg: object, *args: object) -> None:
         """Log a message, if a logger is available."""
         if not self.logger:
             return
         self.logger.log(level, msg, *args)
 
-    def get_flow_rate(self):
+    def get_flow_rate(self) -> float:
         """Get Droplet's flow rate."""
         return self._flow_rate
 
-    def get_volume_delta(self):
+    def get_volume_delta(self) -> float:
         res = self._volume_delta
         self._volume_delta -= res
         return res
 
-    def get_signal_quality(self):
+    def get_signal_quality(self) -> str:
         """Get Droplet's signal quality."""
         return self._signal_quality
 
-    def get_server_status(self):
+    def get_server_status(self) -> str:
         """Get Droplet's server status."""
         return self._server_status
 
-    def get_availability(self):
+    def get_availability(self) -> bool:
         """Return true if Droplet device is available."""
         return self._available
