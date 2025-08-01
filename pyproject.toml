@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pydroplet"
-version = "2.1.1"
+version = "2.1.2"
 authors = [
   { name="Sarah Seidman", email="sarah.seidman@lixil.com" },
 ]
@@ -20,6 +20,9 @@ classifiers = [
 ]
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
+
+[tools.setuptools.package-data]
+"pydroplet" = ["py.typed"]
 
 [project.urls]
 Homepage = "https://github.com/Hydrific/pydroplet"
