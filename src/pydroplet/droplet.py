@@ -124,6 +124,7 @@ class Droplet:
     token: str
     port: int = 80
     logger: logging.Logger | None = None
+    timeout: float = 5
 
     _flow_rate: float = 0
     _volume_delta: float = 0
@@ -181,17 +182,21 @@ class Droplet:
     async def disconnect(self) -> None:
         """Disconnect from WebSocket."""
         self._available = False
+        self._connected = False
         if self._client:
             await self._client.close()
-            self._connected = False
 
     async def listen(self, callback: Callable[[Any], None]) -> None:
         """Listen for messages over the websocket."""
         while self._client and not self._client.closed:
-            message = await self._client.receive()
+            try:
+                message = await self._client.receive(self.timeout)
+            except TimeoutError:
+                self._log(logging.WARNING, "Read timeout")
+                continue
             match message.type:
                 case aiohttp.WSMsgType.ERROR:
-                    self._log(logging.ERROR, "Received error message")
+                    self._log(logging.ERROR, "Received error message: %s", message.data)
                     await self.disconnect()
                     return
                 case aiohttp.WSMsgType.TEXT:
