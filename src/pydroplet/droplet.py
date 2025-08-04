@@ -156,7 +156,6 @@ class Droplet:
 
     async def connect(self) -> bool:
         """Connect to Droplet."""
-        self._log(logging.ERROR, "Connecting")
         if self._connected:
             return True
 
@@ -181,7 +180,6 @@ class Droplet:
 
     async def disconnect(self) -> None:
         """Disconnect from WebSocket."""
-        self._log(logging.ERROR, "Disconnect")
         self._available = False
         if self._client:
             await self._client.close()
@@ -211,8 +209,8 @@ class Droplet:
                     pass
                 case _:
                     self._log(
-                        logging.ERROR,
-                        f"Msg type: {aiohttp.WSMsgType(message.type).name}",
+                        logging.WARNING,
+                        f"Received unexpected message type: {aiohttp.WSMsgType(message.type).name}",
                     )
 
     def add_accumulator(self, name: str, reset_time: datetime.datetime) -> bool:
@@ -258,6 +256,7 @@ class Droplet:
         for a in self._accumulators:
             if a.name == name:
                 return a.get_volume()
+        self._log(logging.WARNING, "Accumulator '%s' not found", name)
         return -1
 
     def _parse_message(self, msg: dict[str, Any]) -> bool:
