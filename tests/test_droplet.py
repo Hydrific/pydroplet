@@ -14,7 +14,7 @@ def droplet_device() -> droplet.Droplet:
 @pytest.fixture
 def droplet_discovery() -> droplet.DropletDiscovery:
     return droplet.DropletDiscovery(
-        "localhost", 443, "Droplet-1234._droplet._tcp._local.", {}
+        "localhost", 443, "Droplet-1234._droplet._tcp._local."
     )
 
 
@@ -23,13 +23,13 @@ def test_valid_discovery(droplet_discovery: droplet.DropletDiscovery) -> None:
 
 
 def test_invalid_discovery() -> None:
-    invalid_device_id = droplet.DropletDiscovery("localhost", 443, "", {})
+    invalid_device_id = droplet.DropletDiscovery("localhost", 443, "")
     assert not invalid_device_id.is_valid()
 
-    no_port = droplet.DropletDiscovery("localhost", None, "Droplet-1234.local", {})
+    no_port = droplet.DropletDiscovery("localhost", None, "Droplet-1234.local")
     assert not no_port.is_valid()
 
-    invalid_port = droplet.DropletDiscovery("localhost", -1, "Droplet-1234.local", {})
+    invalid_port = droplet.DropletDiscovery("localhost", -1, "Droplet-1234.local")
     assert not invalid_port.is_valid()
 
 

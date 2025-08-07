@@ -1,5 +1,6 @@
 """Droplet API."""
 
+import asyncio
 from dataclasses import dataclass
 import json
 import logging
@@ -35,23 +36,18 @@ class DropletConnection:
 class DropletDiscovery:
     """Store Droplet discovery information."""
 
-    device_id: str | None
+    device_id: str
     host: str
     port: int | None
-    properties: dict[str, Any]
 
-    def __init__(
-        self, host: str, port: int | None, service_name: str, properties: dict[str, Any]
-    ) -> None:
+    def __init__(self, host: str, port: int | None, service_name: str) -> None:
         """Initialize Droplet discovery."""
         self.host = host
         self.port = port
         try:
             self.device_id = service_name.split(".")[0]
         except IndexError:
-            self.device_id = None
-
-        self.properties = properties
+            self.device_id = ""
 
     def is_valid(self) -> bool:
         """Check discovery validity."""
@@ -126,6 +122,7 @@ class Droplet:
     logger: logging.Logger | None = None
     timeout: float = 5
 
+    _properties: dict[str, str] = {}
     _flow_rate: float = 0
     _volume_delta: float = 0
     _signal_quality: str = "Unknown"
@@ -135,6 +132,7 @@ class Droplet:
 
     _client: aiohttp.ClientWebSocketResponse | None = None
     _connected: bool = False
+    _listen_forever = False
 
     def __init__(
         self,
@@ -172,19 +170,19 @@ class Droplet:
             aiohttp.ClientConnectionError,
             socket.gaierror,
         ) as ex:
-            self._log(logging.ERROR, "Failed to open connection: %s", str(ex))
+            self._log(logging.WARNING, "Failed to open connection: %s", str(ex))
             self._available = False
             return False
 
-        self._available = True
         return True
 
-    async def disconnect(self) -> None:
+    async def disconnect(self) -> bool:
         """Disconnect from WebSocket."""
         self._available = False
         self._connected = False
         if self._client:
-            await self._client.close()
+            return await self._client.close()
+        return True
 
     async def listen(self, callback: Callable[[Any], None]) -> None:
         """Listen for messages over the websocket."""
@@ -196,18 +194,22 @@ class Droplet:
                 continue
             match message.type:
                 case aiohttp.WSMsgType.ERROR:
-                    self._log(logging.ERROR, "Received error message: %s", message.data)
+                    self._log(
+                        logging.WARNING, "Received error message: %s", message.data
+                    )
                     await self.disconnect()
                     return
                 case aiohttp.WSMsgType.TEXT:
+                    if not self._available:
+                        self._available = True
+                        callback(None)
                     try:
                         if self._parse_message(message.json()):
-                            self._available = True
                             callback(None)
                     except json.JSONDecodeError:
                         pass
                 case aiohttp.WSMsgType.CLOSE | aiohttp.WSMsgType.CLOSED:
-                    self._log(logging.ERROR, "Connection closed!")
+                    self._log(logging.WARNING, "Connection closed!")
                     await self.disconnect()
                     return
                 case aiohttp.WSMsgType.CLOSING:
@@ -217,6 +219,22 @@ class Droplet:
                         logging.WARNING,
                         f"Received unexpected message type: {aiohttp.WSMsgType(message.type).name}",
                     )
+
+    async def listen_forever(
+        self, reconnect_delay: int, callback: Callable[[Any], None]
+    ) -> None:
+        """Listen for messages. If Droplet disconnects, try to connect again."""
+        self._listen_forever = True
+        while self._listen_forever:
+            connected = await self.connect()
+            if connected:
+                await self.listen(callback=callback)
+            callback(None)
+            await asyncio.sleep(reconnect_delay)
+
+    async def stop_listening(self) -> None:
+        """Stop the listen_forever loop."""
+        self._listen_forever = False
 
     def add_accumulator(self, name: str, reset_time: datetime.datetime) -> bool:
         """Add a volume accumulator. Returns true on success, false if there is already an accumulator of the same name."""
@@ -265,6 +283,17 @@ class Droplet:
         return -1
 
     def _parse_message(self, msg: dict[str, Any]) -> bool:
+        if msg.get("ids"):
+            return self._parse_info_message(msg)
+        return self._parse_state_message(msg)
+
+    def _parse_info_message(self, msg: dict[str, str]) -> bool:
+        if self._properties != msg:
+            self._properties = msg
+            return True
+        return False
+
+    def _parse_state_message(self, msg: dict[str, Any]) -> bool:
         """Parse state message and return true if anything changed."""
         changed = False
         if (flow_rate := msg.get("flow")) is not None:
@@ -308,3 +337,21 @@ class Droplet:
     def get_availability(self) -> bool:
         """Return true if Droplet device is available."""
         return self._available
+
+    def get_model(self) -> str:
+        return self._properties.get("mdl", "")
+
+    def get_manufacturer(self) -> str:
+        return self._properties.get("mf", "")
+
+    def get_device_id(self) -> str:
+        return self._properties.get("ids", "")
+
+    def get_fw_version(self) -> str:
+        return self._properties.get("sw", "")
+
+    def get_sn(self) -> str:
+        return self._properties.get("sn", "")
+
+    def version_info_available(self) -> bool:
+        return self._properties != {}
