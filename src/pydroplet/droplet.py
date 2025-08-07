@@ -1,5 +1,6 @@
 """Droplet API."""
 
+import asyncio
 from dataclasses import dataclass
 import json
 import logging
@@ -131,6 +132,7 @@ class Droplet:
 
     _client: aiohttp.ClientWebSocketResponse | None = None
     _connected: bool = False
+    _listen_forever = False
 
     def __init__(
         self,
@@ -217,6 +219,22 @@ class Droplet:
                         logging.WARNING,
                         f"Received unexpected message type: {aiohttp.WSMsgType(message.type).name}",
                     )
+
+    async def listen_forever(
+        self, reconnect_delay: int, callback: Callable[[Any], None]
+    ) -> None:
+        """Listen for messages. If Droplet disconnects, try to connect again."""
+        self._listen_forever = True
+        while self._listen_forever:
+            connected = await self.connect()
+            if connected:
+                await self.listen(callback=callback)
+            callback(None)
+            await asyncio.sleep(reconnect_delay)
+
+    async def stop_listening(self) -> None:
+        """Stop the listen_forever loop."""
+        self._listen_forever = False
 
     def add_accumulator(self, name: str, reset_time: datetime.datetime) -> bool:
         """Add a volume accumulator. Returns true on success, false if there is already an accumulator of the same name."""
