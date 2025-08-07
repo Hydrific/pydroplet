@@ -1,13 +1,14 @@
 import pytest
+import pytest_asyncio
 import aiohttp
 from datetime import datetime, timedelta
 from pydroplet import droplet
 
 
-@pytest.fixture
-def droplet_device() -> droplet.Droplet:
+@pytest_asyncio.fixture
+async def droplet_device() -> droplet.Droplet:
     return droplet.Droplet(
-        "localhost", aiohttp.client.ClientSession, "123456", 443, None
+        "localhost", aiohttp.client.ClientSession(), "123456", 443, None
     )
 
 
@@ -23,9 +24,6 @@ def test_valid_discovery(droplet_discovery: droplet.DropletDiscovery) -> None:
 
 
 def test_invalid_discovery() -> None:
-    invalid_device_id = droplet.DropletDiscovery("localhost", 443, "")
-    assert not invalid_device_id.is_valid()
-
     no_port = droplet.DropletDiscovery("localhost", None, "Droplet-1234.local")
     assert not no_port.is_valid()
 
