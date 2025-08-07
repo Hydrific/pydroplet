@@ -8,7 +8,8 @@ import socket
 import ssl
 import datetime
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Self, Tuple
+import time
 
 import aiohttp
 
@@ -36,22 +37,26 @@ class DropletConnection:
 class DropletDiscovery:
     """Store Droplet discovery information."""
 
-    device_id: str
+    METADATA_TIMEOUT: int = 5
+
     host: str
     port: int | None
+
+    _device_id: str
+    _client: aiohttp.ClientWebSocketResponse | None = None
 
     def __init__(self, host: str, port: int | None, service_name: str) -> None:
         """Initialize Droplet discovery."""
         self.host = host
         self.port = port
         try:
-            self.device_id = service_name.split(".")[0]
+            self._device_id = service_name.split(".")[0]
         except IndexError:
-            self.device_id = ""
+            self._device_id = ""
 
     def is_valid(self) -> bool:
         """Check discovery validity."""
-        if not self.device_id or self.port is None or self.port < 1:
+        if self.port is None or self.port < 1:
             return False
         return True
 
@@ -59,27 +64,57 @@ class DropletDiscovery:
         self, session: aiohttp.client.ClientSession, pairing_code: str
     ) -> bool:
         """Try to connect to Droplet with provided credentials."""
-        client = None
         try:
-            client = await DropletConnection.get_client(
+            self._client = await DropletConnection.get_client(
                 session, self.host, self.port, pairing_code
             )
-            res = await client.receive(timeout=1)
+            res = await self._client.receive(timeout=1)
             if not res or res.type in [
                 aiohttp.WSMsgType.CLOSE,
                 aiohttp.WSMsgType.CLOSED,
             ]:
                 return False
+            # If this message happened to contain the device ID, we should get that
+            msg: dict[str, str] = {}
+            try:
+                msg = res.json()
+            except json.JSONDecodeError:
+                return True
+            if dev_id := msg.get("ids"):
+                self._device_id = dev_id
         except (
             aiohttp.WSServerHandshakeError,
             aiohttp.ClientConnectionError,
             socket.gaierror,
         ):
             return False
-        finally:
-            if client:
-                await client.close()
         return True
+
+    async def get_device_id(self) -> str:
+        """Get the Droplet's device ID."""
+        if self._device_id:
+            return self._device_id
+
+        if not self._client or self._client.closed:
+            return ""
+
+        # If we don't already have the device ID, try to get it
+        end = time.time() + self.METADATA_TIMEOUT
+        while not self._device_id and time.time() < end:
+            msg: dict[str, str] = {}
+            try:
+                msg = await self._client.receive_json(timeout=1)
+            except json.JSONDecodeError:
+                continue
+            self._device_id = msg.get("ids", "")
+        return self._device_id
+
+    def __enter__(self) -> Self:
+        return self
+
+    async def __exit__(self, *_: Tuple[Any, ...]) -> None:
+        if self._client and not self._client.closed:
+            await self._client.close()
 
 
 @dataclass
@@ -180,7 +215,7 @@ class Droplet:
         """Disconnect from WebSocket."""
         self._available = False
         self._connected = False
-        if self._client:
+        if self._client and not self._client.closed:
             return await self._client.close()
         return True
 
