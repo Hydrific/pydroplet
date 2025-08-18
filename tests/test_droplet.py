@@ -37,15 +37,15 @@ def test_parse_message(droplet_device: droplet.Droplet) -> None:
     assert droplet_device._parse_message(flow_msg)
     assert droplet_device.get_flow_rate() == 0.5
 
-    assert droplet_device.get_server_status() == "Unknown"
+    assert droplet_device.get_server_status() is None
     server_msg = {"server": "Connected"}
     assert droplet_device._parse_message(server_msg)
-    assert droplet_device.get_server_status() == "Connected"
+    assert droplet_device.get_server_status() == "connected"
 
-    assert droplet_device.get_signal_quality() == "Unknown"
+    assert droplet_device.get_signal_quality() is None
     signal_msg = {"signal": "Strong Signal"}
     assert droplet_device._parse_message(signal_msg)
-    assert droplet_device.get_signal_quality() == "Strong Signal"
+    assert droplet_device.get_signal_quality() == "strong_signal"
 
     assert droplet_device.get_volume_delta() == 0
     volume_msg = {"volume": 0.1}
