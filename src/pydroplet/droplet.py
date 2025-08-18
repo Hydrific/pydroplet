@@ -160,8 +160,8 @@ class Droplet:
     _properties: dict[str, str] = {}
     _flow_rate: float = 0
     _volume_delta: float = 0
-    _signal_quality: str = "Unknown"
-    _server_status: str = "Unknown"
+    _signal_quality: str | None = None
+    _server_status: str | None = None
     _available: bool = False
     _accumulators: list[VolumeAccumulator] = []
 
@@ -361,13 +361,17 @@ class Droplet:
         self._volume_delta -= res
         return res
 
-    def get_signal_quality(self) -> str:
+    def get_signal_quality(self) -> str | None:
         """Get Droplet's signal quality."""
-        return self._signal_quality
+        if self._signal_quality is None:
+            return None
+        return self._signal_quality.lower().replace(" ", "_")
 
-    def get_server_status(self) -> str:
+    def get_server_status(self) -> str | None:
         """Get Droplet's server status."""
-        return self._server_status
+        if self._server_status is None:
+            return None
+        return self._server_status.lower().replace(" ", "_")
 
     def get_availability(self) -> bool:
         """Return true if Droplet device is available."""
