@@ -160,6 +160,7 @@ class Droplet:
     _properties: dict[str, str] = {}
     _flow_rate: float = 0
     _volume_delta: float = 0
+    _volume_last_fetched: datetime.datetime | None = None
     _signal_quality: str | None = None
     _server_status: str | None = None
     _available: bool = False
@@ -359,7 +360,11 @@ class Droplet:
     def get_volume_delta(self) -> float:
         res = self._volume_delta
         self._volume_delta -= res
+        self._volume_last_fetched = datetime.datetime.now()
         return res
+
+    def get_volume_last_fetched(self) -> datetime.datetime | None:
+        return self._volume_last_fetched
 
     def get_signal_quality(self) -> str | None:
         """Get Droplet's signal quality."""

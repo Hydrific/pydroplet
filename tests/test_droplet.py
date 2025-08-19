@@ -58,7 +58,13 @@ def test_parse_message(droplet_device: droplet.Droplet) -> None:
 
 
 def test_volume_delta(droplet_device: droplet.Droplet) -> None:
+    assert droplet_device.get_volume_last_fetched() is None
+    time_before_fetch = datetime.now()
     assert droplet_device.get_volume_delta() == 0
+    time_after_fetch = droplet_device.get_volume_last_fetched()
+    assert time_after_fetch is not None
+    assert time_after_fetch > time_before_fetch
+
     volume_msg = {"volume": 0.5}
     assert droplet_device._parse_message(volume_msg)
     assert droplet_device.get_volume_delta() == 0.5
