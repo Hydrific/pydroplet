@@ -155,7 +155,7 @@ class Droplet:
     token: str
     port: int = 80
     logger: logging.Logger | None = None
-    timeout: float = 5
+    timeout: float = 15
 
     _properties: dict[str, str] = {}
     _flow_rate: float = 0
