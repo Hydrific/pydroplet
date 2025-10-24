@@ -222,7 +222,7 @@ class Droplet:
 
     async def listen(self, callback: Callable[[Any], None]) -> None:
         """Listen for messages over the websocket."""
-        while self._client and not self._client.closed:
+        while self._listen_forever and self._client and not self._client.closed:
             try:
                 message = await self._client.receive(self.timeout)
             except TimeoutError:
@@ -230,6 +230,7 @@ class Droplet:
                 continue
             except aiohttp.ClientError:
                 self._log(logging.WARNING, "Client error, disconnecting")
+                await self.disconnect()
                 return
             match message.type:
                 case aiohttp.WSMsgType.ERROR:
