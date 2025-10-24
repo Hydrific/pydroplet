@@ -30,7 +30,7 @@ class DropletConnection:
         ssl_context.verify_mode = ssl.CERT_NONE
         headers = {"Authorization": token}
         return await session.ws_connect(
-            url=url, ssl_context=ssl_context, headers=headers, heartbeat=10
+            url=url, ssl=ssl_context, headers=headers, heartbeat=10
         )
 
 
@@ -222,12 +222,16 @@ class Droplet:
 
     async def listen(self, callback: Callable[[Any], None]) -> None:
         """Listen for messages over the websocket."""
-        while self._client and not self._client.closed:
+        while self._listen_forever and self._client and not self._client.closed:
             try:
                 message = await self._client.receive(self.timeout)
             except TimeoutError:
                 self._log(logging.WARNING, "Read timeout")
                 continue
+            except aiohttp.ClientError:
+                self._log(logging.WARNING, "Client error, disconnecting")
+                await self.disconnect()
+                return
             match message.type:
                 case aiohttp.WSMsgType.ERROR:
                     self._log(
