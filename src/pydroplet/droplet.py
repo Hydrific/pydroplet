@@ -30,7 +30,7 @@ class DropletConnection:
         ssl_context.verify_mode = ssl.CERT_NONE
         headers = {"Authorization": token}
         return await session.ws_connect(
-            url=url, ssl_context=ssl_context, headers=headers, heartbeat=10
+            url=url, ssl=ssl_context, headers=headers, heartbeat=10
         )
 
 
@@ -228,6 +228,9 @@ class Droplet:
             except TimeoutError:
                 self._log(logging.WARNING, "Read timeout")
                 continue
+            except aiohttp.ClientError:
+                self._log(logging.WARNING, "Client error, disconnecting")
+                return
             match message.type:
                 case aiohttp.WSMsgType.ERROR:
                     self._log(
