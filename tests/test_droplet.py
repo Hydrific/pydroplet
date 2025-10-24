@@ -104,18 +104,16 @@ def test_volume_accumulator(droplet_device: droplet.Droplet) -> None:
     # But an existing one succeeds
     assert droplet_device.remove_accumulator("daily")
 
+
 @pytest.mark.asyncio
 async def test_client_errors(droplet_device) -> None:
     def callback(_):
         pass
+
     async def mock_connect():
         return True
 
-    with (
-        patch(
-            "aiohttp.ClientWebSocketResponse", autospec=True
-        ) as mock_client,
-    ):
+    with (patch("aiohttp.ClientWebSocketResponse", autospec=True) as mock_client,):
         client = mock_client.return_value
         client.receive.side_effect = aiohttp.ClientConnectionResetError()
         client.closed = False
@@ -126,22 +124,20 @@ async def test_client_errors(droplet_device) -> None:
             tg.create_task(droplet_device.listen_forever(1, callback))
             await asyncio.sleep(1)
             await droplet_device.stop_listening()
-        
+
+
 @pytest.mark.asyncio
 async def test_unhandled_error(droplet_device) -> None:
     def callback(_):
         pass
+
     async def mock_connect():
         return True
 
     class DropletError(Exception):
         pass
 
-    with (
-        patch(
-            "aiohttp.ClientWebSocketResponse", autospec=True
-        ) as mock_client,
-    ):
+    with (patch("aiohttp.ClientWebSocketResponse", autospec=True) as mock_client,):
         client = mock_client.return_value
         client.receive.side_effect = DropletError()
         client.closed = False
