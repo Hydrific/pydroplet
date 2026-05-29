@@ -150,6 +150,9 @@ class VolumeAccumulator:
 class Droplet:
     """Droplet device."""
 
+    LEAK_ON = "ON"
+    LEAK_OFF = "OFF"
+
     host: str
     session: aiohttp.client.ClientSession
     token: str
@@ -163,6 +166,8 @@ class Droplet:
     _volume_last_fetched: datetime.datetime | None = None
     _signal_quality: str | None = None
     _server_status: str | None = None
+    _low_leak: bool | None = None
+    _high_leak: bool | None = None
     _available: bool = False
     _accumulators: list[VolumeAccumulator] = []
 
@@ -349,6 +354,27 @@ class Droplet:
         if (signal := msg.get("signal")) and self._signal_quality != signal:
             self._signal_quality = signal
             changed = True
+
+        low_leak = msg.get("low_leak")
+        if low_leak == self.LEAK_OFF:
+            low_leak = False
+        elif low_leak == self.LEAK_ON:
+            low_leak = True
+        # else, leave it as None
+        if low_leak != self._low_leak:
+            self._low_leak = low_leak
+            changed = True
+
+        high_leak = msg.get("high_leak")
+        if high_leak == self.LEAK_OFF:
+            high_leak = False
+        elif high_leak == self.LEAK_ON:
+            high_leak = True
+        # else, leave it as None
+        if high_leak != self._high_leak:
+            self._high_leak = high_leak
+            changed = True
+
         return changed
 
     def _log(self, level: int, msg: object, *args: object) -> None:
@@ -381,6 +407,14 @@ class Droplet:
         if self._server_status is None:
             return None
         return self._server_status.lower().replace(" ", "_")
+
+    def get_low_leak(self) -> bool | None:
+        """Return low leak status, or None if unknown."""
+        return self._low_leak
+
+    def get_high_leak(self) -> bool | None:
+        """Return high leak status, or None if unknown."""
+        return self._high_leak
 
     def get_availability(self) -> bool:
         """Return true if Droplet device is available."""

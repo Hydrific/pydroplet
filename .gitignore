@@ -5,3 +5,4 @@ dist
 secrets
 __pycache__
 build/
+.mypy_cache/
