@@ -55,13 +55,6 @@ def test_parse_message(droplet_device: droplet.Droplet) -> None:
     assert droplet_device._parse_message(volume_msg)
     assert droplet_device.get_volume_delta() == 0.1
 
-    assert droplet_device.get_low_leak() == False
-    assert droplet_device.get_high_leak() == False
-    leak_msg = {"low_leak": True, "high_leak": True}
-    assert droplet_device._parse_message(leak_msg)
-    assert droplet_device.get_low_leak() == True
-    assert droplet_device.get_high_leak() == True
-
     # The value is unchanged so these should be false
     assert not droplet_device._parse_message(server_msg)
     assert not droplet_device._parse_message(signal_msg)
@@ -110,6 +103,22 @@ def test_volume_accumulator(droplet_device: droplet.Droplet) -> None:
     assert not droplet_device.remove_accumulator("test")
     # But an existing one succeeds
     assert droplet_device.remove_accumulator("daily")
+
+
+def test_leak_string_parsing(droplet_device: droplet.Droplet) -> None:
+    assert droplet_device.get_low_leak() is None
+    assert droplet_device.get_high_leak() is None
+
+    assert droplet_device._parse_message({"low_leak": "ON", "high_leak": "OFF"})
+    assert droplet_device.get_low_leak() is True
+    assert droplet_device.get_high_leak() is False
+
+    assert droplet_device._parse_message({"low_leak": "OFF", "high_leak": "ON"})
+    assert droplet_device.get_low_leak() is False
+    assert droplet_device.get_high_leak() is True
+
+    # Same values again should be a no-op
+    assert not droplet_device._parse_message({"low_leak": "OFF", "high_leak": "ON"})
 
 
 @pytest.mark.asyncio

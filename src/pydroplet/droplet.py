@@ -356,24 +356,24 @@ class Droplet:
             changed = True
 
         low_leak = msg.get("low_leak")
-        if low_leak == self.LEAK_OFF:
-            low_leak = False
-        elif low_leak == self.LEAK_ON:
-            low_leak = True
-        # else, leave it as None
-        if low_leak != self._low_leak:
-            self._low_leak = low_leak
-            changed = True
+        if low_leak is not None:
+            if low_leak == self.LEAK_OFF:
+                low_leak = False
+            elif low_leak == self.LEAK_ON:
+                low_leak = True
+            if low_leak != self._low_leak:
+                self._low_leak = low_leak
+                changed = True
 
         high_leak = msg.get("high_leak")
-        if high_leak == self.LEAK_OFF:
-            high_leak = False
-        elif high_leak == self.LEAK_ON:
-            high_leak = True
-        # else, leave it as None
-        if high_leak != self._high_leak:
-            self._high_leak = high_leak
-            changed = True
+        if high_leak is not None:
+            if high_leak == self.LEAK_OFF:
+                high_leak = False
+            elif high_leak == self.LEAK_ON:
+                high_leak = True
+            if high_leak != self._high_leak:
+                self._high_leak = high_leak
+                changed = True
 
         return changed
 
