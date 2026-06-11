@@ -18,4 +18,4 @@ See the `examples` directory to get started.
 - Unusual flow status ("low_leak") - true if unusual flow is detected, such as a leaky flapper or slow leak.
 
 **Note:**
-In order to view leak and unusual flow status, Droplet must be connected to Hydrific servers. All other data is available even if the Droplet is restricted to the local network.
+In order to view leak and unusual flow status, Droplet must be connected to Hydrific servers. All other data is available even if the Droplet is restricted to the local network. Also, Droplet's firmware must be v1.4.0 or greater.
