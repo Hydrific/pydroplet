@@ -42,7 +42,9 @@ async def main():
                 f"Droplet updated: flow={dev.get_flow_rate()},"
                 f"volume_delta={dev.get_volume_delta()},"
                 f"server_connectivity={dev.get_server_status()},"
-                f"signal_quality={dev.get_signal_quality()}"
+                f"signal_quality={dev.get_signal_quality()},"
+                f"low_leak={dev.get_low_leak()},"
+                f"high_leak={dev.get_high_leak()}"
             )
             updated.clear()
 

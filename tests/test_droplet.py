@@ -105,6 +105,22 @@ def test_volume_accumulator(droplet_device: droplet.Droplet) -> None:
     assert droplet_device.remove_accumulator("daily")
 
 
+def test_leak_string_parsing(droplet_device: droplet.Droplet) -> None:
+    assert droplet_device.get_low_leak() is None
+    assert droplet_device.get_high_leak() is None
+
+    assert droplet_device._parse_message({"low_leak": "ON", "high_leak": "OFF"})
+    assert droplet_device.get_low_leak() is True
+    assert droplet_device.get_high_leak() is False
+
+    assert droplet_device._parse_message({"low_leak": "OFF", "high_leak": "ON"})
+    assert droplet_device.get_low_leak() is False
+    assert droplet_device.get_high_leak() is True
+
+    # Same values again should be a no-op
+    assert not droplet_device._parse_message({"low_leak": "OFF", "high_leak": "ON"})
+
+
 @pytest.mark.asyncio
 async def test_client_errors(droplet_device) -> None:
     def callback(_):
