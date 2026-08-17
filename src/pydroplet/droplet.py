@@ -160,7 +160,7 @@ class Droplet:
     logger: logging.Logger | None = None
     timeout: float = 15
 
-    _properties: dict[str, str] = {}
+    _properties: dict[str, str]
     _flow_rate: float = 0
     _volume_delta: float = 0
     _volume_last_fetched: datetime.datetime | None = None
@@ -169,7 +169,7 @@ class Droplet:
     _low_leak: bool | None = None
     _high_leak: bool | None = None
     _available: bool = False
-    _accumulators: list[VolumeAccumulator] = []
+    _accumulators: list[VolumeAccumulator]
 
     _client: aiohttp.ClientWebSocketResponse | None = None
     _connected: bool = False
@@ -188,6 +188,10 @@ class Droplet:
         self.token = token
         self.port = port
         self.logger = logger
+        # Mutable containers must be created per instance: a class-level
+        # default would be shared by every Droplet in the process.
+        self._properties = {}
+        self._accumulators = []
 
     @property
     def connected(self) -> bool:
