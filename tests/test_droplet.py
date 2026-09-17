@@ -163,3 +163,19 @@ async def test_unhandled_error(droplet_device) -> None:
         with pytest.RaisesGroup(DropletError):
             async with asyncio.TaskGroup() as tg:
                 tg.create_task(droplet_device.listen_forever(1, callback))
+
+
+def test_accumulators_not_shared_between_instances() -> None:
+    # Regression test: _accumulators used to be a class-level list shared by
+    # every Droplet instance, so accumulators registered on one device were
+    # fed by all devices' messages and survived instance replacement.
+    device_a = droplet.Droplet("localhost", None, "123456", 443, None)
+    device_b = droplet.Droplet("localhost", None, "654321", 443, None)
+
+    assert device_a.add_accumulator("daily", datetime.now() + timedelta(days=1))
+    # device_b must not see device_a's accumulator
+    assert device_b.add_accumulator("daily", datetime.now() + timedelta(days=1))
+
+    device_a._update_accumulators(100)
+    assert device_a.get_accumulated_volume("daily") == 100
+    assert device_b.get_accumulated_volume("daily") == 0
