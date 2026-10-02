@@ -30,14 +30,14 @@ class DropletConnection:
         ssl_context.verify_mode = ssl.CERT_NONE
         headers = {"Authorization": token}
         return await session.ws_connect(
-            url=url, ssl=ssl_context, headers=headers, heartbeat=10
+            url=url, ssl=ssl_context, headers=headers, heartbeat=30
         )
 
 
 class DropletDiscovery:
     """Store Droplet discovery information."""
 
-    METADATA_TIMEOUT: int = 5
+    TIMEOUT: int = 10
 
     host: str
     port: int | None
@@ -64,15 +64,24 @@ class DropletDiscovery:
         self, session: aiohttp.client.ClientSession, pairing_code: str
     ) -> bool:
         """Try to connect to Droplet with provided credentials."""
+        await self.close()
         try:
             self._client = await DropletConnection.get_client(
                 session, self.host, self.port, pairing_code
             )
-            res = await self._client.receive(timeout=1)
+            try:
+                res = await self._client.receive(timeout=self.TIMEOUT)
+            except asyncio.TimeoutError:
+                # Droplet rejects a bad pairing code at the handshake (>v1.4.1)
+                # or closes the connection right after (<=v1.4.1)
+                # so if it's still open by now, it was accepted
+                return True
             if not res or res.type in [
                 aiohttp.WSMsgType.CLOSE,
                 aiohttp.WSMsgType.CLOSED,
+                aiohttp.WSMsgType.ERROR,
             ]:
+                await self.close()
                 return False
             # If this message happened to contain the device ID, we should get that
             msg: dict[str, str] = {}
@@ -99,22 +108,31 @@ class DropletDiscovery:
             return ""
 
         # If we don't already have the device ID, try to get it
-        end = time.time() + self.METADATA_TIMEOUT
-        while not self._device_id and time.time() < end:
+        end = time.time() + self.TIMEOUT
+        while not self._device_id:
+            remaining = end - time.time()
+            # aiohttp treats a timeout of 0 as no timeout
+            if remaining <= 0:
+                break
             msg: dict[str, str] = {}
             try:
-                msg = await self._client.receive_json(timeout=1)
-            except json.JSONDecodeError:
+                msg = await self._client.receive_json(timeout=remaining)
+            except (json.JSONDecodeError, asyncio.TimeoutError):
                 continue
             self._device_id = msg.get("ids", "")
         return self._device_id
 
-    def __enter__(self) -> Self:
-        return self
-
-    async def __exit__(self, *_: Tuple[Any, ...]) -> None:
+    async def close(self) -> None:
+        """Close the connection opened by try_connect."""
         if self._client and not self._client.closed:
             await self._client.close()
+        self._client = None
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *_: Tuple[Any, ...]) -> None:
+        await self.close()
 
 
 @dataclass
@@ -234,7 +252,7 @@ class Droplet:
         while self._listen_forever and self._client and not self._client.closed:
             try:
                 message = await self._client.receive(self.timeout)
-            except TimeoutError:
+            except asyncio.TimeoutError:
                 self._log(logging.WARNING, "Read timeout")
                 continue
             except aiohttp.ClientError:
@@ -282,8 +300,9 @@ class Droplet:
             await asyncio.sleep(reconnect_delay)
 
     async def stop_listening(self) -> None:
-        """Stop the listen_forever loop."""
+        """Stop the listen_forever loop and close the connection."""
         self._listen_forever = False
+        await self.disconnect()
 
     def add_accumulator(self, name: str, reset_time: datetime.datetime) -> bool:
         """Add a volume accumulator. Returns true on success, false if there is already an accumulator of the same name."""

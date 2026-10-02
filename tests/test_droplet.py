@@ -1,8 +1,7 @@
 import pytest
 import asyncio
 import pytest_asyncio
-import logging
-from unittest.mock import patch
+from unittest.mock import AsyncMock, create_autospec, patch
 import aiohttp
 from datetime import datetime, timedelta
 from pydroplet import droplet
@@ -179,3 +178,94 @@ def test_accumulators_not_shared_between_instances() -> None:
     device_a._update_accumulators(100)
     assert device_a.get_accumulated_volume("daily") == 100
     assert device_b.get_accumulated_volume("daily") == 0
+
+
+@pytest.mark.asyncio
+async def test_try_connect_accepts_quiet_connection(
+    droplet_discovery: droplet.DropletDiscovery,
+) -> None:
+    # Droplet may not send its first message until a second or two after the
+    # handshake, and a connection that stays open means the pairing code was right
+    with (patch("aiohttp.ClientWebSocketResponse", autospec=True) as mock_client,):
+        client = mock_client.return_value
+        client.receive.side_effect = TimeoutError()
+        with patch.object(
+            droplet.DropletConnection, "get_client", AsyncMock(return_value=client)
+        ):
+            assert await droplet_discovery.try_connect(None, "123456")
+        client.receive.assert_awaited_once_with(
+            timeout=droplet.DropletDiscovery.TIMEOUT
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    [
+        aiohttp.WSMessage(aiohttp.WSMsgType.CLOSE, 1000, ""),
+        aiohttp.WSMessage(aiohttp.WSMsgType.ERROR, ConnectionResetError(), None),
+    ],
+)
+async def test_try_connect_rejects_closed_connection(
+    droplet_discovery: droplet.DropletDiscovery, message: aiohttp.WSMessage
+) -> None:
+    # Older firmware accepts the handshake, then closes on a wrong code
+    with (patch("aiohttp.ClientWebSocketResponse", autospec=True) as mock_client,):
+        client = mock_client.return_value
+        client.closed = False
+        client.receive.return_value = message
+        with patch.object(
+            droplet.DropletConnection, "get_client", AsyncMock(return_value=client)
+        ):
+            assert not await droplet_discovery.try_connect(None, "123456")
+        client.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_try_connect_closes_previous_connection(
+    droplet_discovery: droplet.DropletDiscovery,
+) -> None:
+    # A retried pairing attempt must not leave the earlier connection open
+    old_client = create_autospec(aiohttp.ClientWebSocketResponse, instance=True)
+    old_client.closed = False
+    new_client = create_autospec(aiohttp.ClientWebSocketResponse, instance=True)
+    new_client.receive.side_effect = TimeoutError()
+    droplet_discovery._client = old_client
+    with patch.object(
+        droplet.DropletConnection, "get_client", AsyncMock(return_value=new_client)
+    ):
+        assert await droplet_discovery.try_connect(None, "123456")
+    old_client.close.assert_awaited_once()
+    new_client.close.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_discovery_context_manager_closes_connection(
+    droplet_discovery: droplet.DropletDiscovery,
+) -> None:
+    client = create_autospec(aiohttp.ClientWebSocketResponse, instance=True)
+    client.closed = False
+    async with droplet_discovery:
+        droplet_discovery._client = client
+    client.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_device_id_waits_through_quiet_seconds() -> None:
+    discovery = droplet.DropletDiscovery("localhost", 443, "")
+    with (patch("aiohttp.ClientWebSocketResponse", autospec=True) as mock_client,):
+        client = mock_client.return_value
+        client.closed = False
+        client.receive_json.side_effect = [TimeoutError(), {"ids": "Droplet-1234"}]
+        discovery._client = client
+        assert await discovery.get_device_id() == "Droplet-1234"
+
+
+@pytest.mark.asyncio
+async def test_stop_listening_closes_connection(droplet_device) -> None:
+    # Home Assistant cancels the listen task on unload, so nothing else closes it
+    client = create_autospec(aiohttp.ClientWebSocketResponse, instance=True)
+    client.closed = False
+    droplet_device._client = client
+    await droplet_device.stop_listening()
+    client.close.assert_awaited_once()
